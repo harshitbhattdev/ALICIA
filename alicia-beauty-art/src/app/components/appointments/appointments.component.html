@@ -1,0 +1,226 @@
+<div class="appointments-container">
+  <!-- Header -->
+  <div class="page-header">
+    <h1>Appointments</h1>
+    <button class="btn-primary" (click)="showNewAppointmentForm()">
+      <span class="btn-icon">📅</span>
+      New Appointment
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="search-box">
+      <input 
+        type="text" 
+        placeholder="Search appointments..." 
+        [(ngModel)]="searchTerm"
+        (input)="onSearchChange()"
+        class="search-input">
+      <span class="search-icon">🔍</span>
+    </div>
+    
+    <div class="filter-group">
+      <label for="statusFilter">Filter by status:</label>
+      <select 
+        id="statusFilter"
+        [(ngModel)]="filterStatus" 
+        (change)="onFilterChange()"
+        class="status-filter">
+        <option value="all">All Appointments</option>
+        <option value="scheduled">Scheduled</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="no-show">No Show</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Appointment Form Modal -->
+  <div class="modal-overlay" *ngIf="showForm" (click)="cancelForm()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ editingAppointment ? 'Edit' : 'New' }} Appointment</h2>
+        <button class="close-btn" (click)="cancelForm()">×</button>
+      </div>
+      
+      <form [formGroup]="appointmentForm" (ngSubmit)="saveAppointment()" class="appointment-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="customerName">Customer Name *</label>
+            <input 
+              type="text" 
+              id="customerName"
+              formControlName="customerName"
+              placeholder="Enter customer name"
+              class="form-input">
+          </div>
+          
+          <div class="form-group">
+            <label for="customerPhone">Phone Number *</label>
+            <input 
+              type="tel" 
+              id="customerPhone"
+              formControlName="customerPhone"
+              placeholder="+1-555-0000"
+              class="form-input">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="customerEmail">Email Address *</label>
+          <input 
+            type="email" 
+            id="customerEmail"
+            formControlName="customerEmail"
+            placeholder="customer@email.com"
+            class="form-input">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="serviceId">Service *</label>
+            <select 
+              id="serviceId"
+              formControlName="serviceId"
+              class="form-select">
+              <option value="">Select a service</option>
+              <option *ngFor="let service of services" [value]="service.id">
+                {{ service.name }} - {{ formatCurrency(service.price) }} ({{ service.duration }}min)
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="date">Date *</label>
+            <input 
+              type="date" 
+              id="date"
+              formControlName="date"
+              class="form-input">
+          </div>
+          
+          <div class="form-group">
+            <label for="time">Time *</label>
+            <input 
+              type="time" 
+              id="time"
+              formControlName="time"
+              class="form-input">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notes</label>
+          <textarea 
+            id="notes"
+            formControlName="notes"
+            placeholder="Any special notes or requirements..."
+            rows="3"
+            class="form-textarea"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" (click)="cancelForm()">
+            Cancel
+          </button>
+          <button 
+            type="submit" 
+            class="btn-primary"
+            [disabled]="appointmentForm.invalid">
+            {{ editingAppointment ? 'Update' : 'Create' }} Appointment
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Appointments List -->
+  <div class="appointments-list">
+    <div class="list-header">
+      <h2>All Appointments ({{ filteredAppointments.length }})</h2>
+    </div>
+
+    <div class="appointments-grid" *ngIf="filteredAppointments.length > 0">
+      <div 
+        *ngFor="let appointment of filteredAppointments" 
+        class="appointment-card"
+        [class]="getStatusClass(appointment.status)">
+        
+        <div class="appointment-header">
+          <div class="customer-info">
+            <h3>{{ appointment.customerName }}</h3>
+            <p class="phone">{{ appointment.customerPhone }}</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-icon">{{ getStatusIcon(appointment.status) }}</span>
+            <span class="status-text">{{ appointment.status }}</span>
+          </div>
+        </div>
+
+        <div class="appointment-details">
+          <div class="service-info">
+            <h4>{{ appointment.serviceName }}</h4>
+            <p class="price">{{ formatCurrency(appointment.price) }}</p>
+            <p class="duration">{{ appointment.duration }} minutes</p>
+          </div>
+          
+          <div class="datetime-info">
+            <p class="date">{{ formatDate(appointment.date) }}</p>
+            <p class="time">{{ appointment.time }}</p>
+          </div>
+        </div>
+
+        <div class="appointment-notes" *ngIf="appointment.notes">
+          <p><strong>Notes:</strong> {{ appointment.notes }}</p>
+        </div>
+
+        <div class="appointment-actions">
+          <div class="status-actions" *ngIf="appointment.status === 'scheduled'">
+            <button 
+              class="action-btn complete"
+              (click)="updateStatus(appointment, 'completed')">
+              ✅ Complete
+            </button>
+            <button 
+              class="action-btn cancel"
+              (click)="updateStatus(appointment, 'cancelled')">
+              ❌ Cancel
+            </button>
+            <button 
+              class="action-btn no-show"
+              (click)="updateStatus(appointment, 'no-show')">
+              🚫 No Show
+            </button>
+          </div>
+          
+          <div class="crud-actions">
+            <button 
+              class="action-btn edit"
+              (click)="editAppointment(appointment)">
+              ✏️ Edit
+            </button>
+            <button 
+              class="action-btn delete"
+              (click)="deleteAppointment(appointment)">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="no-appointments" *ngIf="filteredAppointments.length === 0">
+      <div class="empty-state">
+        <span class="empty-icon">📅</span>
+        <h3>No appointments found</h3>
+        <p>{{ searchTerm || filterStatus !== 'all' ? 'Try adjusting your filters' : 'Start by creating your first appointment' }}</p>
+        <button class="btn-primary" (click)="showNewAppointmentForm()">
+          Create New Appointment
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

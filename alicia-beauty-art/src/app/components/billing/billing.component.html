@@ -1,0 +1,335 @@
+<div class="billing-container">
+  <!-- Header -->
+  <div class="page-header">
+    <h1>Billing</h1>
+    <button class="btn-primary" (click)="showNewBillForm()">
+      <span class="btn-icon">🧾</span>
+      New Bill
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="search-box">
+      <input 
+        type="text" 
+        placeholder="Search bills..." 
+        [(ngModel)]="searchTerm"
+        (input)="onSearchChange()"
+        class="search-input">
+      <span class="search-icon">🔍</span>
+    </div>
+    
+    <div class="filter-group">
+      <label for="statusFilter">Filter by payment status:</label>
+      <select 
+        id="statusFilter"
+        [(ngModel)]="filterStatus" 
+        (change)="onFilterChange()"
+        class="status-filter">
+        <option value="all">All Bills</option>
+        <option value="pending">Pending</option>
+        <option value="paid">Paid</option>
+        <option value="partial">Partial</option>
+        <option value="refunded">Refunded</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Bill Form Modal -->
+  <div class="modal-overlay" *ngIf="showForm" (click)="cancelForm()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ editingBill ? 'Edit' : 'New' }} Bill</h2>
+        <button class="close-btn" (click)="cancelForm()">×</button>
+      </div>
+      
+      <form [formGroup]="billForm" (ngSubmit)="saveBill()" class="bill-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="appointmentId">From Appointment (Optional)</label>
+            <select 
+              id="appointmentId"
+              formControlName="appointmentId"
+              (change)="onAppointmentSelect()"
+              class="form-select">
+              <option value="">Select completed appointment</option>
+              <option *ngFor="let appointment of appointments" [value]="appointment.id">
+                {{ appointment.customerName }} - {{ appointment.serviceName }} ({{ formatDate(appointment.date) }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="customerName">Customer Name *</label>
+          <input 
+            type="text" 
+            id="customerName"
+            formControlName="customerName"
+            placeholder="Enter customer name"
+            class="form-input">
+        </div>
+
+        <!-- Services Section -->
+        <div class="services-section">
+          <div class="section-header">
+            <h3>Services</h3>
+            <button type="button" class="btn-secondary" (click)="addServiceRow()">
+              + Add Service
+            </button>
+          </div>
+
+          <div formArrayName="services">
+            <div 
+              *ngFor="let service of servicesFormArray.controls; let i = index" 
+              [formGroupName]="i"
+              class="service-row">
+              
+              <div class="form-group">
+                <label>Service</label>
+                <select formControlName="serviceId" class="form-select">
+                  <option value="">Select service</option>
+                  <option *ngFor="let svc of services" [value]="svc.id">
+                    {{ svc.name }} - {{ formatCurrency(svc.price) }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Quantity</label>
+                <input 
+                  type="number" 
+                  formControlName="quantity"
+                  min="1"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label>Price</label>
+                <input 
+                  type="number" 
+                  formControlName="price"
+                  min="0"
+                  step="0.01"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label>Total</label>
+                <div class="total-display">
+                  {{ formatCurrency((service.get('quantity')?.value || 0) * (service.get('price')?.value || 0)) }}
+                </div>
+              </div>
+
+              <button 
+                type="button" 
+                class="remove-btn"
+                (click)="removeServiceRow(i)"
+                *ngIf="servicesFormArray.length > 1">
+                🗑️
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bill Totals -->
+        <div class="bill-totals">
+          <div class="totals-row">
+            <span>Subtotal:</span>
+            <span>{{ formatCurrency(calculateSubtotal()) }}</span>
+          </div>
+          <div class="totals-row">
+            <span>Tax ({{ billForm.get('tax')?.value }}%):</span>
+            <span>{{ formatCurrency(calculateTax()) }}</span>
+          </div>
+          <div class="totals-row">
+            <span>Discount ({{ billForm.get('discount')?.value }}%):</span>
+            <span>-{{ formatCurrency(calculateDiscount()) }}</span>
+          </div>
+          <div class="totals-row total">
+            <span>Total:</span>
+            <span>{{ formatCurrency(calculateTotal()) }}</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="discount">Discount (%)</label>
+            <input 
+              type="number" 
+              id="discount"
+              formControlName="discount"
+              min="0"
+              max="100"
+              step="0.1"
+              class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label for="tax">Tax (%)</label>
+            <input 
+              type="number" 
+              id="tax"
+              formControlName="tax"
+              min="0"
+              max="50"
+              step="0.1"
+              class="form-input">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="paymentMethod">Payment Method *</label>
+            <select 
+              id="paymentMethod"
+              formControlName="paymentMethod"
+              class="form-select">
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="online">Online</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="paymentStatus">Payment Status *</label>
+            <select 
+              id="paymentStatus"
+              formControlName="paymentStatus"
+              class="form-select">
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="partial">Partial</option>
+              <option value="refunded">Refunded</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notes</label>
+          <textarea 
+            id="notes"
+            formControlName="notes"
+            placeholder="Any additional notes..."
+            rows="3"
+            class="form-textarea"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" (click)="cancelForm()">
+            Cancel
+          </button>
+          <button 
+            type="submit" 
+            class="btn-primary"
+            [disabled]="billForm.invalid || servicesFormArray.length === 0">
+            {{ editingBill ? 'Update' : 'Create' }} Bill
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bills List -->
+  <div class="bills-list">
+    <div class="list-header">
+      <h2>All Bills ({{ filteredBills.length }})</h2>
+    </div>
+
+    <div class="bills-grid" *ngIf="filteredBills.length > 0">
+      <div 
+        *ngFor="let bill of filteredBills" 
+        class="bill-card"
+        [class]="getPaymentStatusClass(bill.paymentStatus)">
+        
+        <div class="bill-header">
+          <div class="bill-info">
+            <h3>{{ bill.customerName }}</h3>
+            <p class="bill-id">Bill #{{ bill.id }}</p>
+            <p class="bill-date">{{ formatDate(bill.date) }}</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-icon">{{ getPaymentStatusIcon(bill.paymentStatus) }}</span>
+            <span class="status-text">{{ bill.paymentStatus }}</span>
+          </div>
+        </div>
+
+        <div class="bill-services">
+          <h4>Services</h4>
+          <div *ngFor="let service of bill.services" class="service-item">
+            <span class="service-name">{{ service.serviceName }}</span>
+            <span class="service-details">{{ service.quantity }}x {{ formatCurrency(service.price) }}</span>
+            <span class="service-total">{{ formatCurrency(service.total) }}</span>
+          </div>
+        </div>
+
+        <div class="bill-totals-summary">
+          <div class="total-line">
+            <span>Subtotal:</span>
+            <span>{{ formatCurrency(bill.subtotal) }}</span>
+          </div>
+          <div class="total-line" *ngIf="bill.tax > 0">
+            <span>Tax:</span>
+            <span>{{ formatCurrency(bill.tax) }}</span>
+          </div>
+          <div class="total-line" *ngIf="bill.discount > 0">
+            <span>Discount:</span>
+            <span>-{{ formatCurrency(bill.discount) }}</span>
+          </div>
+          <div class="total-line final-total">
+            <span>Total:</span>
+            <span>{{ formatCurrency(bill.total) }}</span>
+          </div>
+        </div>
+
+        <div class="bill-payment-info">
+          <p><strong>Payment Method:</strong> {{ bill.paymentMethod | titlecase }}</p>
+        </div>
+
+        <div class="bill-notes" *ngIf="bill.notes">
+          <p><strong>Notes:</strong> {{ bill.notes }}</p>
+        </div>
+
+        <div class="bill-actions">
+          <div class="payment-actions" *ngIf="bill.paymentStatus !== 'paid'">
+            <button 
+              class="action-btn paid"
+              (click)="updatePaymentStatus(bill, 'paid')">
+              ✅ Mark Paid
+            </button>
+            <button 
+              class="action-btn partial"
+              (click)="updatePaymentStatus(bill, 'partial')">
+              ⚠️ Partial
+            </button>
+          </div>
+          
+          <div class="crud-actions">
+            <button 
+              class="action-btn print"
+              (click)="printBill(bill)">
+              🖨️ Print
+            </button>
+            <button 
+              class="action-btn edit"
+              (click)="editBill(bill)">
+              ✏️ Edit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="no-bills" *ngIf="filteredBills.length === 0">
+      <div class="empty-state">
+        <span class="empty-icon">🧾</span>
+        <h3>No bills found</h3>
+        <p>{{ searchTerm || filterStatus !== 'all' ? 'Try adjusting your filters' : 'Start by creating your first bill' }}</p>
+        <button class="btn-primary" (click)="showNewBillForm()">
+          Create New Bill
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
